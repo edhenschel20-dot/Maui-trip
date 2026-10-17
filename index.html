@@ -281,6 +281,9 @@
   .pk-acc:active{transform:translateY(1px)}
   .pk-suggest{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:2px 0 11px;line-height:1.3}
   .pk-suggest input{width:18px;height:18px;flex:0 0 auto}
+  .mode-badge{text-align:center;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;border-radius:8px;margin:-2px 0 14px;border:1px solid var(--line)}
+  body.is-owner #modeBadge{background:var(--gold-soft);color:#5A3B0B;border-color:var(--gold)}
+  body.is-guest #modeBadge{background:var(--sea);color:var(--deep)}
 </style>
 </head>
 <body class="is-guest">
@@ -299,6 +302,7 @@
     <button id="tabBtnCalendar" class="tab-btn" onclick="showTab('calendar')">Calendar</button>
   </div>
   <div class="live-bar" id="liveBar"><span class="live-dot"></span><span id="liveTxt">Connecting…</span></div>
+  <div class="mode-badge" id="modeBadge"></div>
 </div>
 
 <!-- BUDGET -->
@@ -491,14 +495,16 @@ function setStatus(txt, state){ // state: 'on' | 'off' | ''
   $("liveTxt").textContent = txt;
 }
 
+function setBadge(){ var b=document.getElementById("modeBadge"); if(!b){ return; } b.textContent = ownerMode ? "Your view — funding shows only to you" : "Guest view — what Tony & Kathy see"; }
 function detectMode(){
   try{
     if(location.hash && location.hash.toLowerCase().indexOf("me")>=0){ localStorage.setItem("maui_owner","1"); history.replaceState(null,"",location.pathname+location.search); }
     ownerMode = localStorage.getItem("maui_owner")==="1";
   }catch(e){ ownerMode = (location.hash||"").toLowerCase().indexOf("me")>=0; }
   document.body.className = ownerMode ? "is-owner" : "is-guest";
+  setBadge();
 }
-function toggleOwner(){ ownerMode=!ownerMode; try{ localStorage.setItem("maui_owner", ownerMode?"1":"0"); }catch(e){} document.body.className=ownerMode?"is-owner":"is-guest"; recalc(); if(window.PK&&PK.refresh){ PK.refresh(); } }
+function toggleOwner(){ ownerMode=!ownerMode; try{ localStorage.setItem("maui_owner", ownerMode?"1":"0"); }catch(e){} document.body.className=ownerMode?"is-owner":"is-guest"; setBadge(); recalc(); if(window.PK&&PK.refresh){ PK.refresh(); } }
 
 /* ---------- local mirror (fallback + instant offline) ---------- */
 const LK = {items:"maui_live_items", events:"maui_live_events", burn:"maui_live_burn", meta:"maui_live_meta"};
@@ -561,6 +567,19 @@ async function reload(maySeed){
   checks = md.pays_left!=null ? (+md.pays_left||0): DEFAULT_CHECKS;
   per    = md.per_pay!=null   ? (+md.per_pay||0)  : DEFAULT_PER;
   if(maySeed && items.length===0){ await seed(); return reload(false); }
+  // one-time rescue: values entered while offline live in localStorage; adopt + push up
+  try{
+    var _lm=null; try{ _lm=JSON.parse(localStorage.getItem(LK.meta)||"null"); }catch(e){}
+    if(!_lm || !(+_lm.saved>0)){ try{ var _hv=JSON.parse(localStorage.getItem("hawaii_v1")||"null"); if(_hv && +_hv.saved>0){ _lm=_hv; } }catch(e){} }
+    var _rescued=false;
+    if(_lm && (+saved||0)===0 && (+_lm.saved||0)>0){ saved=+_lm.saved; if(_lm.checks!=null){ checks=+_lm.checks; } if(_lm.per!=null){ per=+_lm.per; } _rescued=true; }
+    var _li=null; try{ _li=JSON.parse(localStorage.getItem(LK.items)||"null"); }catch(e){}
+    if(_li && _li.length){ var _pm={}; _li.forEach(function(x){ if(x.paid){ _pm[x.id]=1; } }); items.forEach(function(it){ if(!it.paid && _pm[it.id]){ it.paid=true; _rescued=true; } }); }
+    if(_rescued){
+      sb.from("trip_meta").upsert({trip:TRIP, burn:(+burn||0), saved:(+saved||0), pays_left:(+checks||0), per_pay:(+per||0)}).then(function(){});
+      items.filter(function(it){ return it.paid; }).forEach(function(it){ sb.from("trip_items").upsert({id:it.id,trip:TRIP,name:it.name,note:it.note,cost:(+it.cost||0),pos:it.pos||0,paid:true}).then(function(){}); });
+    }
+  }catch(e){ console.warn("rescue:", e); }
   saveLocal();
   renderAll();
 }
