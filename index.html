@@ -276,6 +276,11 @@
   .live-bar.on{color:var(--good)} .live-bar.off{color:var(--coral)}
   .owner-only{}
   body.is-guest .owner-only{display:none !important;}
+  .pk-sugg{border-color:var(--gold)!important;background:var(--gold-soft)}
+  .pk-acc{flex:0 0 auto;border:0;background:var(--good);color:#fff;font:inherit;font-weight:800;font-size:12px;padding:7px 13px;border-radius:8px;cursor:pointer;margin-right:4px}
+  .pk-acc:active{transform:translateY(1px)}
+  .pk-suggest{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:2px 0 11px;line-height:1.3}
+  .pk-suggest input{width:18px;height:18px;flex:0 0 auto}
 </style>
 </head>
 <body class="is-guest">
@@ -403,6 +408,7 @@
     </div>
     <div class="pk-bar"><span id="pkBar"></span></div>
   </div>
+  <div id="pkSuggestBox"></div>
   <div class="pk-toggle">
     <button id="pkBtnCat" class="active" onclick="PK.setView('cat')">By category</button>
     <button id="pkBtnBag" onclick="PK.setView('bag')">By bag</button>
@@ -416,10 +422,10 @@
       <label>Goes in<select id="pkNewBag"></select></label>
     </div>
     <input type="text" id="pkNewNote" placeholder="Optional note">
-    <button class="pk-addbtn" onclick="PK.addItem()">Add to list</button>
+    <label class="pk-suggest"><input type="checkbox" id="pkSuggestChk"> Suggest to <span id="pkOtherName">the other group</span> instead of adding to mine</label>
+    <button class="pk-addbtn" onclick="PK.addItem()">Add</button>
   </div>
-  <div class="foot">Your packing list — saved on this phone only.<br>
-    <button class="reset" onclick="PK.resetAll()">Reset packing list</button></div>
+  <div class="foot">Your group's packing list — private to your side, synced live across your phones.</div>
 </div>
 
 <!-- CALENDAR -->
@@ -453,7 +459,7 @@ function slug(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replac
 
 const DEFAULT_ITEMS = [
   {name:"Scuba cert — you", note:"certification", cost:700},
-  {name:"Scuba cert — Kim", note:"certification", cost:700},
+  {name:"Scuba cert — Sue", note:"certification", cost:700},
   {name:"Boat dive #1", note:"2 adults", cost:370},
   {name:"Boat dive #2", note:"2 adults", cost:370},
   {name:"Boat dive #3", note:"2 adults", cost:360},
@@ -492,7 +498,7 @@ function detectMode(){
   }catch(e){ ownerMode = (location.hash||"").toLowerCase().indexOf("me")>=0; }
   document.body.className = ownerMode ? "is-owner" : "is-guest";
 }
-function toggleOwner(){ ownerMode=!ownerMode; try{ localStorage.setItem("maui_owner", ownerMode?"1":"0"); }catch(e){} document.body.className=ownerMode?"is-owner":"is-guest"; recalc(); }
+function toggleOwner(){ ownerMode=!ownerMode; try{ localStorage.setItem("maui_owner", ownerMode?"1":"0"); }catch(e){} document.body.className=ownerMode?"is-owner":"is-guest"; recalc(); if(window.PK&&PK.refresh){ PK.refresh(); } }
 
 /* ---------- local mirror (fallback + instant offline) ---------- */
 const LK = {items:"maui_live_items", events:"maui_live_events", burn:"maui_live_burn", meta:"maui_live_meta"};
@@ -777,103 +783,112 @@ initDB();      // then go live
 <script>
 /* packing — per-device localStorage */
 var PK = (function(){
-  var KEY = "maui_live_pack";
   var CATEGORIES = ["Documents & Money","Electronics","Clothing","Toiletries & Health","Beach & Ocean Gear","Groceries & Snacks","Miscellaneous"];
-  var BAGS = ["Main Suitcase 1","Main Suitcase 2","BIL's scuba case","Carry-on","Personal bag","Wearing / on-person","Buy there"];
-
+  var OWNER_BAGS = ["Ed's suitcase","Sue's suitcase","Chris's suitcase","Ed's carry-on","Sue's carry-on","Chris's carry-on","Ed's golf bag","Personal bag","Wearing / on-person","Buy there"];
+  var GUEST_BAGS = ["Tony's suitcase","Kathy's suitcase","Tony's carry-on","Kathy's carry-on","Tony's golf bag","Tony's scuba case","Personal bag","Wearing / on-person","Buy there"];
+  var UNASSIGNED = "— unassigned —";
   var SEED = [
-    {name:"Photo ID / driver's license", cat:"Documents & Money", bag:"Personal bag", note:"Domestic trip — no passport needed"},
-    {name:"Credit/debit cards + some cash", cat:"Documents & Money", bag:"Personal bag", note:""},
-    {name:"Flight + car reservations", cat:"Documents & Money", bag:"Personal bag", note:"Save offline on phone in case of no signal"},
-    {name:"Scuba cert / eLearning + medical form", cat:"Documents & Money", bag:"Personal bag", note:"Bring proof for the certification dives"},
-
-    {name:"Phones + charging cables", cat:"Electronics", bag:"Personal bag", note:"No plug adapter needed — Hawaii is US outlets"},
-    {name:"Power bank", cat:"Electronics", bag:"Carry-on", note:"MUST fly carry-on — lithium banned in checked bags", warn:true},
-    {name:"Underwater camera / GoPro + SD cards", cat:"Electronics", bag:"Carry-on", note:"Dive footage, whale watching"},
-    {name:"Binoculars", cat:"Electronics", bag:"Carry-on", note:"Whale watching — Dec is peak season"},
-    {name:"Headphones / earbuds", cat:"Electronics", bag:"Personal bag", note:""},
-    {name:"Kid's tablet + headphones", cat:"Electronics", bag:"Personal bag", note:"Long flight with a 7-year-old"},
-
-    {name:"Swimsuits (2–3 each)", cat:"Clothing", bag:"Main Suitcase 1", note:"You'll be wet daily; they dry slow"},
-    {name:"Rash guards / UV shirts", cat:"Clothing", bag:"Main Suitcase 1", note:"Cuts sunscreen need, reef-friendlier"},
-    {name:"Board shorts / quick-dry shorts", cat:"Clothing", bag:"Main Suitcase 1", note:""},
-    {name:"T-shirts / tanks", cat:"Clothing", bag:"Main Suitcase 1", note:""},
-    {name:"One nice outfit each", cat:"Clothing", bag:"Main Suitcase 2", note:"Mama's Fish House + Old Lahaina Luau — resort casual"},
-    {name:"Light layer / hoodie", cat:"Clothing", bag:"Main Suitcase 2", note:"Boat is windy, upcountry cools off at night"},
-    {name:"Packable rain jacket", cat:"Clothing", bag:"Main Suitcase 2", note:"Road to Hana / east side is wet"},
-    {name:"Water shoes / reef shoes", cat:"Clothing", bag:"Main Suitcase 2", note:"Rocky entries, reef, waterfalls"},
-    {name:"Sneakers", cat:"Clothing", bag:"Main Suitcase 2", note:"Hana trails, Haleakalā"},
-    {name:"Sandals / flip-flops", cat:"Clothing", bag:"Wearing / on-person", note:""},
-    {name:"Sun hats + polarized sunglasses", cat:"Clothing", bag:"Personal bag", note:""},
-    {name:"Underwear, socks, PJs", cat:"Clothing", bag:"Main Suitcase 1", note:""},
-
-    {name:"Mineral sunscreen (zinc/titanium)", cat:"Toiletries & Health", bag:"Buy there", note:"Maui law: mineral only, non-nano. Buy on-island or pack mineral-only — $1,000 fine for chemical.", warn:true},
-    {name:"After-sun / aloe gel", cat:"Toiletries & Health", bag:"Main Suitcase 1", note:""},
-    {name:"Motion sickness meds", cat:"Toiletries & Health", bag:"Personal bag", note:"Boat dives, Molokini, Hana switchbacks"},
-    {name:"Bug spray", cat:"Toiletries & Health", bag:"Main Suitcase 1", note:"Rainforest + Road to Hana mosquitoes"},
-    {name:"Prescription meds (original bottles)", cat:"Toiletries & Health", bag:"Personal bag", note:"Keep in carry-on", warn:true},
-    {name:"Toiletry kit + SPF lip balm", cat:"Toiletries & Health", bag:"Main Suitcase 1", note:""},
-    {name:"First aid / blister + reef-cut care", cat:"Toiletries & Health", bag:"Main Suitcase 1", note:""},
-
-    {name:"Snorkel gear (masks, snorkels, fins)", cat:"Beach & Ocean Gear", bag:"BIL's scuba case", note:"Bulky — good fit for the scuba case"},
-    {name:"Any personal scuba gear", cat:"Beach & Ocean Gear", bag:"BIL's scuba case", note:""},
-    {name:"Dry bag", cat:"Beach & Ocean Gear", bag:"BIL's scuba case", note:"Keeps phone/wallet dry on boat trips"},
-    {name:"Quick-dry beach towels", cat:"Beach & Ocean Gear", bag:"Main Suitcase 2", note:"Some rentals don't provide them"},
-    {name:"Waterproof phone pouch", cat:"Beach & Ocean Gear", bag:"Personal bag", note:""},
-    {name:"Reusable water bottles (empty)", cat:"Beach & Ocean Gear", bag:"Carry-on", note:"Fill after security; hydrate in the heat"},
-    {name:"Soft cooler / beach bag", cat:"Beach & Ocean Gear", bag:"Buy there", note:"Or grab a cheap one at Costco Kahului"},
-
-    {name:"Flight snacks", cat:"Groceries & Snacks", bag:"Personal bag", note:"Long flight, packaged snacks only"},
-    {name:"Electrolyte packets", cat:"Groceries & Snacks", bag:"Main Suitcase 1", note:"Heat + water days"},
-    {name:"Groceries / coffee / breakfast", cat:"Groceries & Snacks", bag:"Buy there", note:"Costco Kahului is the move for a house stay"},
-
-    {name:"Daypack for Road to Hana / hikes", cat:"Miscellaneous", bag:"Wearing / on-person", note:""},
-    {name:"Ziploc + laundry bags", cat:"Miscellaneous", bag:"Main Suitcase 1", note:"Wet swimsuits, sandy gear"},
-    {name:"Travel games / cards for the kid", cat:"Miscellaneous", bag:"Carry-on", note:""},
-    {name:"Compact umbrella", cat:"Miscellaneous", bag:"Main Suitcase 2", note:""}
+    {name:"Photo ID / driver's license", cat:"Documents & Money", note:"Domestic trip — no passport needed"},
+    {name:"Credit/debit cards + some cash", cat:"Documents & Money", note:""},
+    {name:"Flight + car reservations", cat:"Documents & Money", note:"Save offline on phone in case of no signal"},
+    {name:"Phones + charging cables", cat:"Electronics", note:"Hawaii is US outlets — no adapter"},
+    {name:"Power bank", cat:"Electronics", note:"MUST fly carry-on — lithium banned in checked bags", warn:true},
+    {name:"Underwater camera / GoPro + SD cards", cat:"Electronics", note:"Dive footage, whale watching"},
+    {name:"Headphones / earbuds", cat:"Electronics", note:""},
+    {name:"Swimsuits (2–3 each)", cat:"Clothing", note:"You'll be wet daily; they dry slow"},
+    {name:"Rash guards / UV shirts", cat:"Clothing", note:"Cuts sunscreen need, reef-friendlier"},
+    {name:"One nice outfit each", cat:"Clothing", note:"Mama's Fish House + Luau — resort casual"},
+    {name:"Light layer / hoodie", cat:"Clothing", note:"Boat is windy, upcountry cools at night"},
+    {name:"Water shoes / reef shoes", cat:"Clothing", note:"Rocky entries, reef, waterfalls"},
+    {name:"Sun hats + polarized sunglasses", cat:"Clothing", note:""},
+    {name:"Underwear, socks, PJs", cat:"Clothing", note:""},
+    {name:"Mineral sunscreen (zinc/titanium)", cat:"Toiletries & Health", note:"Maui law: mineral only. Buy on-island or pack mineral-only — $1,000 fine for chemical.", warn:true},
+    {name:"Motion sickness meds", cat:"Toiletries & Health", note:"Boat dives, Molokini, Hana switchbacks"},
+    {name:"Bug spray", cat:"Toiletries & Health", note:"Rainforest + Road to Hana mosquitoes"},
+    {name:"Prescription meds (original bottles)", cat:"Toiletries & Health", note:"Keep in carry-on", warn:true},
+    {name:"Toiletry kit + SPF lip balm", cat:"Toiletries & Health", note:""},
+    {name:"Snorkel gear (mask, snorkel, fins)", cat:"Beach & Ocean Gear", note:"Bulky — good fit for the scuba case"},
+    {name:"Dry bag", cat:"Beach & Ocean Gear", note:"Keeps phone/wallet dry on boat trips"},
+    {name:"Quick-dry beach towels", cat:"Beach & Ocean Gear", note:"Some rentals don't provide them"},
+    {name:"Reusable water bottles (empty)", cat:"Beach & Ocean Gear", note:"Fill after security; hydrate"},
+    {name:"Flight snacks", cat:"Groceries & Snacks", note:"Packaged only"},
+    {name:"Daypack for Road to Hana / hikes", cat:"Miscellaneous", note:""},
+    {name:"Ziploc + laundry bags", cat:"Miscellaneous", note:"Wet swimsuits, sandy gear"}
   ];
 
   var el = function(id){ return document.getElementById(id); };
-  var view = "cat";
-  var data = load();
+  var items = [], suggestions = [], view = "cat", online = false;
+  var psb = (typeof window.supabase!=="undefined" && typeof SB_URL!=="undefined") ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 
-  function load(){
-    try{ var r = localStorage.getItem(KEY); if(r){ return JSON.parse(r); } }catch(e){}
-    return seed();
-  }
-  function seed(){
-    return SEED.map(function(s,i){ return Object.assign({id:"i"+Date.now()+"_"+i, packed:false}, s); });
-  }
-  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){} }
-  function find(id){ return data.filter(function(x){ return x.id===id; })[0]; }
   function esc(s){ return (s||"").replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function side(){ return (typeof ownerMode!=="undefined" && ownerMode) ? "owner" : "guest"; }
+  function other(){ return side()==="owner" ? "guest" : "owner"; }
+  function labelOf(s){ return s==="owner" ? "Ed, Sue & Chris" : "Tony & Kathy"; }
+  function bagsBase(){ return side()==="owner" ? OWNER_BAGS : GUEST_BAGS; }
+  function bagKey(){ return "maui_bags_" + side(); }
+  function customBags(){ try{ var r=localStorage.getItem(bagKey()); return r?JSON.parse(r):[]; }catch(e){ return []; } }
+  function allBags(){ return bagsBase().concat(customBags()); }
+  function saveCustomBag(name){ var cb=customBags(); if(bagsBase().indexOf(name)<0 && cb.indexOf(name)<0){ cb.push(name); try{ localStorage.setItem(bagKey(), JSON.stringify(cb)); }catch(e){} } }
+  function bagOptionList(selected){
+    var head='<option value=""' + (selected?"":" selected") + '>' + esc(UNASSIGNED) + '</option>';
+    return head + allBags().map(function(b){ return '<option ' + (b===selected?"selected":"") + '>' + esc(b) + '</option>'; }).join("") + '<option value="__add__">➕ Add a bag…</option>';
+  }
 
-  function setView(v){
-    view=v;
-    el("pkBtnCat").classList.toggle("active", v==="cat");
-    el("pkBtnBag").classList.toggle("active", v==="bag");
-    render();
+  function seedItems(){ var S=side(); return SEED.map(function(s){ return {id:S+"-"+_slug(s.name), side:S, name:s.name, cat:s.cat, note:s.note||"", warn:!!s.warn, bag:"", packed:false, suggested_to:"", suggested_by:""}; }); }
+  function lkey(){ return "maui_pack_" + side(); }
+  function saveLocal(){ try{ localStorage.setItem(lkey(), JSON.stringify(items)); }catch(e){} }
+  function loadLocal(){ try{ var r=localStorage.getItem(lkey()); items = r?JSON.parse(r):seedItems(); }catch(e){ items=seedItems(); } if(!online){ suggestions=[]; } render(); }
+
+  function rowToItem(r){ return {id:r.id, side:r.side||"", name:r.name, cat:r.cat, note:r.note||"", warn:!!r.warn, bag:r.bag||"", packed:!!r.packed, suggested_to:r.suggested_to||"", suggested_by:r.suggested_by||""}; }
+  function pull(maySeed){
+    return psb.from("trip_packing").select("*").eq("trip", TRIP).then(function(res){
+      if(res.error){ throw res.error; }
+      var rows=(res.data||[]).map(rowToItem), S=side();
+      items = rows.filter(function(r){ return r.side===S && !r.suggested_to; });
+      suggestions = rows.filter(function(r){ return r.suggested_to===S; });
+      if(maySeed && items.length===0){ return seedRemote().then(function(){ return pull(false); }); }
+      saveLocal(); render();
+    });
   }
-  function toggle(id){ var it=find(id); if(it){ it.packed=!it.packed; save(); render(); } }
-  function changeBag(id,val){ var it=find(id); if(it){ it.bag=val; save(); render(); } }
-  function changeCat(id,val){ var it=find(id); if(it){ it.cat=val; save(); render(); } }
-  function del(id){ data=data.filter(function(x){ return x.id!==id; }); save(); render(); }
+  function seedRemote(){
+    var S=side();
+    var rows = SEED.map(function(s){ return {id:S+"-"+_slug(s.name), trip:TRIP, side:S, name:s.name, cat:s.cat, note:s.note||"", warn:!!s.warn, bag:"", packed:false, suggested_to:"", suggested_by:""}; });
+    return psb.from("trip_packing").upsert(rows);
+  }
+  function subscribe(){
+    psb.channel("pack-"+TRIP).on("postgres_changes",{event:"*",schema:"public",table:"trip_packing",filter:"trip=eq."+TRIP}, function(){ if(online){ pull(false).catch(function(){}); } }).subscribe();
+  }
+  function pushRow(it){ saveLocal(); if(online){ psb.from("trip_packing").upsert({id:it.id,trip:TRIP,side:it.side||"",name:it.name,cat:it.cat,note:it.note||"",warn:!!it.warn,bag:it.bag||"",packed:!!it.packed,suggested_to:it.suggested_to||"",suggested_by:it.suggested_by||""}).then(function(r){ if(r&&r.error){ console.warn(r.error); } }); } }
+  function removeRow(id){ if(online){ psb.from("trip_packing").delete().eq("trip",TRIP).eq("id",id).then(function(){}); } saveLocal(); }
+
+  function findItem(id){ return items.filter(function(x){return x.id===id;})[0] || suggestions.filter(function(x){return x.id===id;})[0]; }
+  function setView(v){ view=v; el("pkBtnCat").classList.toggle("active", v==="cat"); el("pkBtnBag").classList.toggle("active", v==="bag"); render(); }
+  function toggle(id){ var it=findItem(id); if(it){ it.packed=!it.packed; pushRow(it); render(); } }
+  function changeBag(id,val){ var it=findItem(id); if(!it){ return; } if(val==="__add__"){ var nm=(window.prompt("Name the bag or container:","")||"").trim(); if(nm){ saveCustomBag(nm); it.bag=nm; pushRow(it); } render(); return; } it.bag=val; pushRow(it); render(); }
+  function changeCat(id,val){ var it=findItem(id); if(it){ it.cat=val; pushRow(it); render(); } }
+  function del(id){ items=items.filter(function(x){return x.id!==id;}); removeRow(id); render(); }
   function addItem(){
-    var name = el("pkNewName").value.trim(); if(!name){ return; }
-    data.push({id:"i"+Date.now(), name:name, cat:el("pkNewCat").value, bag:el("pkNewBag").value, note:el("pkNewNote").value.trim(), packed:false});
-    el("pkNewName").value=""; el("pkNewNote").value=""; save(); render();
+    var name=el("pkNewName").value.trim(); if(!name){ return; }
+    var cat=el("pkNewCat").value, note=el("pkNewNote").value.trim();
+    var sugg = el("pkSuggestChk") && el("pkSuggestChk").checked;
+    if(sugg){
+      if(!online){ alert("You're offline — suggestions need a connection to reach " + labelOf(other()) + "."); return; }
+      var s1={id:"p"+Date.now()+Math.floor(Math.random()*999), trip:TRIP, side:"", name:name, cat:cat, note:note, warn:false, bag:"", packed:false, suggested_to:other(), suggested_by:labelOf(side())};
+      psb.from("trip_packing").upsert(s1).then(function(r){ if(r&&r.error){ console.warn(r.error); alert("Couldn't send the suggestion."); } else { alert("Sent as a suggestion to " + labelOf(other()) + "."); } });
+      el("pkSuggestChk").checked=false;
+    } else {
+      var bag=el("pkNewBag").value; if(bag==="__add__"){ bag=""; }
+      var it={id:"p"+Date.now()+Math.floor(Math.random()*999), side:side(), name:name, cat:cat, note:note, warn:false, bag:bag, packed:false, suggested_to:"", suggested_by:""};
+      items.push(it); pushRow(it);
+    }
+    el("pkNewName").value=""; el("pkNewNote").value=""; render();
   }
-  function resetAll(){
-    if(confirm("Reset the packing list to the starter list? Items you added will be removed.")){ data=seed(); save(); render(); }
-  }
+  function acceptSuggestion(id){ var it=suggestions.filter(function(x){return x.id===id;})[0]; if(!it){ return; } it.side=side(); it.suggested_to=""; it.suggested_by=""; suggestions=suggestions.filter(function(x){return x.id!==id;}); items.push(it); pushRow(it); render(); }
+  function dismissSuggestion(id){ suggestions=suggestions.filter(function(x){return x.id!==id;}); removeRow(id); render(); }
 
   function itemRow(it){
-    var bagOptions = '<select class="pk-bagsel" onchange="PK.changeBag(\'' + it.id + '\',this.value)">' +
-      BAGS.map(function(b){ return '<option ' + (b===it.bag?"selected":"") + '>' + esc(b) + '</option>'; }).join("") + '</select>';
-    var catOptions = view==="bag"
-      ? '<select class="pk-catsel" onchange="PK.changeCat(\'' + it.id + '\',this.value)">' +
-        CATEGORIES.map(function(c){ return '<option ' + (c===it.cat?"selected":"") + '>' + esc(c) + '</option>'; }).join("") + '</select>'
-      : "";
+    var bagOptions = '<select class="pk-bagsel" onchange="PK.changeBag(\'' + it.id + '\',this.value)">' + bagOptionList(it.bag) + '</select>';
+    var catOptions = view==="bag" ? '<select class="pk-catsel" onchange="PK.changeCat(\'' + it.id + '\',this.value)">' + CATEGORIES.map(function(c){ return '<option ' + (c===it.cat?"selected":"") + '>' + esc(c) + '</option>'; }).join("") + '</select>' : "";
     var note = it.note ? '<div class="pk-note ' + (it.warn?"warn":"") + '">' + esc(it.note) + '</div>' : "";
     return '<div class="pk-item ' + (it.packed?"done":"") + '">' +
       '<div class="pk-check" onclick="PK.toggle(\'' + it.id + '\')"></div>' +
@@ -881,37 +896,53 @@ var PK = (function(){
       '<div class="pk-row2">' + bagOptions + catOptions + '</div></div>' +
       '<button class="pk-del" onclick="PK.del(\'' + it.id + '\')" aria-label="Remove">&times;</button></div>';
   }
-
+  function renderSuggestions(){
+    var box=el("pkSuggestBox"); if(!box){ return; }
+    if(!suggestions.length){ box.innerHTML=""; return; }
+    var body = suggestions.map(function(s){
+      return '<div class="pk-item pk-sugg">' +
+        '<div class="pk-body"><div class="pk-name">' + esc(s.name) + '</div>' +
+        '<div class="pk-note">from ' + esc(s.suggested_by||"the other group") + (s.note?" · " + esc(s.note):"") + '</div></div>' +
+        '<button class="pk-acc" onclick="PK.acceptSuggestion(\'' + s.id + '\')">Add</button>' +
+        '<button class="pk-del" onclick="PK.dismissSuggestion(\'' + s.id + '\')" aria-label="Dismiss">&times;</button></div>';
+    }).join("");
+    box.innerHTML = '<div class="pk-group"><div class="pk-group-head"><div class="pk-group-title" style="color:var(--gold)">Suggested for you</div><div class="pk-group-meta">' + suggestions.length + '</div></div>' + body + '</div>';
+  }
   function render(){
-    var total=data.length, packed=data.filter(function(x){ return x.packed; }).length;
+    renderSuggestions();
+    var total=items.length, packed=items.filter(function(x){return x.packed;}).length;
     el("pkPacked").textContent=packed; el("pkTotal").textContent=total;
-    var pct = total ? Math.round(packed/total*100) : 0;
-    el("pkPct").textContent=pct+"%"; el("pkBar").style.width=pct+"%";
-    var groups = view==="cat" ? CATEGORIES : BAGS;
+    var pct=total?Math.round(packed/total*100):0; el("pkPct").textContent=pct+"%"; el("pkBar").style.width=pct+"%";
+    var groups = view==="cat" ? CATEGORIES : allBags().concat([UNASSIGNED]);
     var html="";
     groups.forEach(function(g){
-      var items = data.filter(function(x){ return view==="cat" ? x.cat===g : x.bag===g; });
-      if(!items.length) return;
-      var done = items.filter(function(x){ return x.packed; }).length;
-      var isBuy = (view==="bag" && g==="Buy there");
-      html += '<div class="pk-group"><div class="pk-group-head">' +
-        '<div class="pk-group-title ' + (isBuy?"buy":"") + '">' + esc(g) + '</div>' +
-        '<div class="pk-group-meta">' + done + '/' + items.length + '</div></div>' +
-        items.map(itemRow).join("") + '</div>';
+      var gi=(g===UNASSIGNED);
+      var list = items.filter(function(x){ return view==="cat" ? x.cat===g : (gi ? !x.bag : x.bag===g); });
+      if(!list.length){ return; }
+      var done=list.filter(function(x){return x.packed;}).length;
+      var isBuy=(view==="bag" && g==="Buy there");
+      html += '<div class="pk-group"><div class="pk-group-head"><div class="pk-group-title ' + (isBuy?"buy":"") + '">' + esc(g) + '</div><div class="pk-group-meta">' + done + '/' + list.length + '</div></div>' + list.map(itemRow).join("") + '</div>';
     });
     el("pkList").innerHTML = html || '<div class="pk-empty">Nothing here yet. Add your first item below.</div>';
   }
 
+  function refresh(){
+    el("pkNewBag").innerHTML = bagOptionList("");
+    if(el("pkOtherName")){ el("pkOtherName").textContent = labelOf(other()); }
+    if(online){ pull(false).catch(function(){ loadLocal(); }); } else { loadLocal(); }
+  }
   function init(){
     el("pkNewCat").innerHTML = CATEGORIES.map(function(x){ return '<option>' + esc(x) + '</option>'; }).join("");
-    el("pkNewBag").innerHTML = BAGS.map(function(x){ return '<option>' + esc(x) + '</option>'; }).join("");
-    render();
-    document.addEventListener("keydown", function(e){
-      if(e.key==="Enter" && (e.target.id==="pkNewName" || e.target.id==="pkNewNote")){ addItem(); }
-    });
+    el("pkNewBag").innerHTML = bagOptionList("");
+    el("pkNewBag").onchange = function(){ if(this.value==="__add__"){ var nm=(window.prompt("Name the bag or container:","")||"").trim(); if(nm){ saveCustomBag(nm); } el("pkNewBag").innerHTML = bagOptionList(nm||""); } };
+    if(el("pkOtherName")){ el("pkOtherName").textContent = labelOf(other()); }
+    loadLocal();
+    if(psb){
+      pull(true).then(function(){ online=true; subscribe(); }).catch(function(e){ console.warn("packing offline:", e); online=false; loadLocal(); });
+    }
+    document.addEventListener("keydown", function(e){ if(e.key==="Enter" && (e.target.id==="pkNewName" || e.target.id==="pkNewNote")){ addItem(); } });
   }
-
-  return {setView:setView, toggle:toggle, changeBag:changeBag, changeCat:changeCat, del:del, addItem:addItem, resetAll:resetAll, init:init};
+  return {setView:setView, toggle:toggle, changeBag:changeBag, changeCat:changeCat, del:del, addItem:addItem, acceptSuggestion:acceptSuggestion, dismissSuggestion:dismissSuggestion, refresh:refresh, init:init};
 })();
 PK.init();
 
