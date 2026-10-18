@@ -457,7 +457,7 @@
     <label class="pk-suggest"><input type="checkbox" id="pkSuggestChk"> Suggest to <span id="pkOtherName">the other group</span> instead of adding to mine</label>
     <button class="pk-addbtn" onclick="PK.addItem()">Add</button>
   </div>
-  <div class="foot">Your group's packing list — private to your side, synced live across your phones.</div>
+  <div class="foot">Your group's packing list — private to your side, synced live across your phones. <span style="opacity:.6">· build Oct18-b</span></div>
 </div>
 
 <!-- CALENDAR -->
@@ -473,28 +473,7 @@
     <input type="text" class="cal-ttl" id="calTitle" placeholder="What\'s happening (e.g. Molokini dive)">
     <input type="text" class="cal-nt" id="calNote" placeholder="note (optional)">
     <select class="cal-link-sel" id="calLink"><option value="">— link a cost (optional) —</option></select>
-    <select class="cal-link-sel" id="calIdea" onchange="if(this.value){var t=document.getElementById('calTitle');t.value=this.value;this.value='';var d=document.getElementById('calDate');if(d&&d.focus)d.focus();}">
-      <option value="">— Extra events not in calendar (then add a date) —</option>
-      <optgroup label="Maybe meals">
-        <option>Loco Deck, Lahaina</option>
-        <option>Sea House, Lahaina (lunch or dinner)</option>
-        <option>Penguins @ Hyatt Regency Kaanapali</option>
-      </optgroup>
-      <optgroup label="Dinner options">
-        <option>Honu Oceanside</option>
-        <option>Aloha Mixed Plate</option>
-      </optgroup>
-      <optgroup label="Rain-day ideas">
-        <option>Arcade / Bowling @ Westin Kaanapali</option>
-        <option>Penny's, Lahaina</option>
-        <option>Flatbread Pizza, Paia</option>
-        <option>Ho'okipa Beach Park</option>
-      </optgroup>
-      <optgroup label="Maybe book">
-        <option>Shark Dive @ Maui Ocean Center (Mon/Wed/Fri 2:30-5:30)</option>
-        <option>Ocean Vodka distillery tour</option>
-      </optgroup>
-    </select>
+    <select class="cal-link-sel" id="calIdea"></select>
     <button onclick="CAL.add()">Add to calendar</button>
   </div>
   <div class="foot">Shared live schedule — everyone sees changes.</div>
@@ -806,8 +785,38 @@ const CAL = (function(){
     sel.value=cur;
     sel.onchange=function(){ var li=itemById(sel.value); var tb=$("calTitle"); if(li && tb && !tb.value.trim()){ tb.value=li.name; } }; }
   function jumpToCost(id){ showTab("budget"); setTimeout(function(){ var t=$("item-"+id); if(t){ t.scrollIntoView({behavior:"smooth",block:"center"}); t.classList.add("item-flash"); setTimeout(()=>t.classList.remove("item-flash"),1600);} },70); }
-  function cmp(a,b){ if((a.date||"")!==(b.date||"")) return (a.date||"")<(b.date||"")?-1:1; var ta=a.time||"",tb=b.time||""; if(ta===tb)return 0; if(!ta)return -1; if(!tb)return 1; return ta<tb?-1:1; }
-  function fmtDay(d){ var p=(d||"").split("-"); if(p.length!==3) return d||"(no date)"; var dt=new Date(+p[0],+p[1]-1,+p[2]); return dt.toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"}); }
+  function cmp(a,b){ var ad=a.date||"9999-99-99", bd=b.date||"9999-99-99"; if(ad!==bd) return ad<bd?-1:1; var ta=a.time||"",tb=b.time||""; if(ta===tb)return 0; if(!ta)return -1; if(!tb)return 1; return ta<tb?-1:1; }
+  function fmtDay(d){ var p=(d||"").split("-"); if(p.length!==3) return d ? d : "💡 Ideas — no date yet"; var dt=new Date(+p[0],+p[1]-1,+p[2]); return dt.toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"}); }
+  var IDEA_SEED = [
+    {g:"Maybe meals", o:["Loco Deck, Lahaina","Sea House, Lahaina (lunch or dinner)","Penguins @ Hyatt Regency Kaanapali"]},
+    {g:"Dinner options", o:["Honu Oceanside","Aloha Mixed Plate"]},
+    {g:"Rain-day ideas", o:["Arcade / Bowling @ Westin Kaanapali","Penny's, Lahaina","Flatbread Pizza, Paia","Ho'okipa Beach Park"]},
+    {g:"Maybe book", o:["Shark Dive @ Maui Ocean Center (Mon/Wed/Fri 2:30-5:30)","Ocean Vodka distillery tour"]}
+  ];
+  var pendingIdeaId = null;
+  function fillIdeaOptions(){
+    var sel=$("calIdea"); if(!sel) return;
+    var html='<option value="">— Extra events not in calendar (then add a date) —</option>';
+    html+='<option value="__addidea__">➕ Add a new idea to this list…</option>';
+    var ideas=events.filter(function(e){ return !e.date; }).slice().sort(function(a,b){ return (a.title||"")<(b.title||"")?-1:1; });
+    if(ideas.length){ html+='<optgroup label="Our added ideas">'+ideas.map(function(e){ return '<option value="idea:'+esc(e.id)+'">'+esc(e.title||"(untitled)")+'</option>'; }).join("")+'</optgroup>'; }
+    html+=IDEA_SEED.map(function(G){ return '<optgroup label="'+esc(G.g)+'">'+G.o.map(function(t){ return '<option value="txt:'+esc(t)+'">'+esc(t)+'</option>'; }).join("")+'</optgroup>'; }).join("");
+    sel.innerHTML=html;
+    sel.onchange=onIdeaChange;
+  }
+  function onIdeaChange(){
+    var sel=$("calIdea"), v=sel.value; if(!v){ return; }
+    if(v==="__addidea__"){
+      sel.value="";
+      var name=(window.prompt("Add an idea — something to maybe do (no date needed):","")||"").trim();
+      if(name){ var ev={id:"idea-"+Date.now(), date:"", time:"", title:name, note:"", itemId:""}; events.push(ev); pushEvent(ev); render(); }
+      return;
+    }
+    if(v.indexOf("idea:")===0){ var id=v.slice(5); var e=events.filter(function(x){return x.id===id;})[0]; if(e){ pendingIdeaId=id; if($("calTitle")) $("calTitle").value=e.title||""; if($("calNote")&&e.note) $("calNote").value=e.note; } }
+    else if(v.indexOf("txt:")===0){ pendingIdeaId=null; if($("calTitle")) $("calTitle").value=v.slice(4); }
+    sel.value="";
+    if($("calDate") && $("calDate").focus) $("calDate").focus();
+  }
   function row(ev){
     var it=ev.itemId?itemById(ev.itemId):null;
     var chip=it?`<div class="cal-costchip" data-jump="${esc(it.id)}">${esc(it.name)} &middot; ${money(it.cost)}</div>`:"";
@@ -860,14 +869,14 @@ const CAL = (function(){
       var dayEvs=evs.filter(e=>e.date===selDate);
       var head=`<div class="cal-day-sel"><button class="cal-allbtn" id="calAll">‹ All days</button><span class="cal-day-head">${esc(fmtDay(selDate))}</span></div>`;
       box.innerHTML=head+(dayEvs.length? dayEvs.map(row).join("") : '<div class="cal-empty">Nothing planned this day yet — add it below.</div>');
-      bind(); var ab=$("calAll"); if(ab) ab.onclick=function(){ selDate=null; render(); }; fillLinkOptions(); return;
+      bind(); var ab=$("calAll"); if(ab) ab.onclick=function(){ selDate=null; render(); }; fillLinkOptions(); fillIdeaOptions(); return;
     }
-    if(!evs.length){ box.innerHTML='<div class="cal-empty">No entries yet. Tap a day above, or add one below — it shows up for everyone.</div>'; fillLinkOptions(); return; }
+    if(!evs.length){ box.innerHTML='<div class="cal-empty">No entries yet. Tap a day above, or add one below — it shows up for everyone.</div>'; fillLinkOptions(); fillIdeaOptions(); return; }
     var byDate={},order=[];
     evs.forEach(ev=>{ var d=ev.date||""; if(!byDate[d]){byDate[d]=[];order.push(d);} byDate[d].push(ev); });
     var html="";
     order.forEach(d=>{ html+=`<div class="cal-day"><div class="cal-day-head">${esc(fmtDay(d))}</div>`+byDate[d].map(row).join("")+`</div>`; });
-    box.innerHTML=html; bind(); fillLinkOptions();
+    box.innerHTML=html; bind(); fillLinkOptions(); fillIdeaOptions();
   }
   function bind(){
     var box=$("calList");
@@ -887,8 +896,10 @@ const CAL = (function(){
     var linkId=$("calLink").value||"";
     if(!t && linkId){ var li=itemById(linkId); if(li){ t=li.name; } }   // pull title from the linked cost
     if(!d||!t){ alert(!d?"Pick a date for the entry.":"Give it a title, or link a cost to use its name."); return; }
-    var ev={id:"c"+Date.now(), date:d, time:$("calTime").value||"", title:t, note:$("calNote").value.trim(), itemId:linkId};
-    events.push(ev);
+    var ev;
+    if(pendingIdeaId){ ev=events.filter(function(x){return x.id===pendingIdeaId;})[0]; pendingIdeaId=null; }
+    if(ev){ ev.date=d; ev.time=$("calTime").value||""; ev.title=t; ev.note=$("calNote").value.trim(); ev.itemId=linkId; }   // move the parked idea onto this date
+    else { ev={id:"c"+Date.now(), date:d, time:$("calTime").value||"", title:t, note:$("calNote").value.trim(), itemId:linkId}; events.push(ev); }
     $("calDate").value="";$("calTime").value="";$("calTitle").value="";$("calNote").value="";$("calLink").value="";
     var dd=parseYmd(d); if(dd){ gridMonth=new Date(dd.getFullYear(),dd.getMonth(),1); selDate=d; }
     pushEvent(ev); render();
