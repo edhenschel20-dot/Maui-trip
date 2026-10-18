@@ -474,7 +474,7 @@
     <input type="text" class="cal-nt" id="calNote" placeholder="note (optional)">
     <select class="cal-link-sel" id="calLink"><option value="">— link a cost (optional) —</option></select>
     <select class="cal-link-sel" id="calIdea" onchange="if(this.value){var t=document.getElementById('calTitle');t.value=this.value;this.value='';var d=document.getElementById('calDate');if(d&&d.focus)d.focus();}">
-      <option value="">— or pick one of her ideas (then add a date) —</option>
+      <option value="">— Extra events not in calendar (then add a date) —</option>
       <optgroup label="Maybe meals">
         <option>Loco Deck, Lahaina</option>
         <option>Sea House, Lahaina (lunch or dinner)</option>
@@ -850,7 +850,7 @@ const CAL = (function(){
       `<div class="cg-dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>`+
       `<div class="cg-grid">${cells}</div>`;
     g.querySelectorAll("[data-nav]").forEach(b=>b.onclick=function(){ gridMonth=new Date(y,m+(+this.getAttribute("data-nav")),1); render(); });
-    g.querySelectorAll("[data-day]").forEach(c=>c.onclick=function(){ var ds=this.getAttribute("data-day"); selDate=(selDate===ds)?null:ds; if(selDate && $("calDate") && !$("calDate").value){ $("calDate").value=selDate; } render(); var gw=$("calGrid"); if(selDate && gw && gw.scrollIntoView){ gw.scrollIntoView({behavior:"smooth",block:"start"}); } });
+    g.querySelectorAll("[data-day]").forEach(c=>c.onclick=function(){ var ds=this.getAttribute("data-day"); selDate=(selDate===ds)?null:ds; if(selDate && $("calDate")){ $("calDate").value=selDate; } render(); var gw=$("calGrid"); if(selDate && gw && gw.scrollIntoView){ gw.scrollIntoView({behavior:"smooth",block:"start"}); } });
   }
   function render(){
     renderGrid();
@@ -912,6 +912,8 @@ document.addEventListener("keydown",function(e){
 });
 
 detectMode();  // owner vs guest
+// If someone adds #me to an already-open page (no full reload), switch live.
+window.addEventListener("hashchange", function(){ detectMode(); try{ renderAll(); }catch(e){} if(window.PK && PK.refresh){ PK.refresh(); } });
 bindOwner();   // wire owner controls once
 loadLocal();   // instant render from cache
 initDB();      // then go live
