@@ -457,7 +457,7 @@
     <label class="pk-suggest"><input type="checkbox" id="pkSuggestChk"> Suggest to <span id="pkOtherName">the other group</span> instead of adding to mine</label>
     <button class="pk-addbtn" onclick="PK.addItem()">Add</button>
   </div>
-  <div class="foot">Your group's packing list — private to your side, synced live across your phones. <span style="opacity:.6">· build Oct18-b</span></div>
+  <div class="foot">Your group's packing list — private to your side, synced live across your phones. <span style="opacity:.6">· build Oct18-c</span></div>
 </div>
 
 <!-- CALENDAR -->
@@ -983,6 +983,7 @@ var PK = (function(){
     return head + allBags().map(function(b){ return '<option ' + (b===selected?"selected":"") + '>' + esc(b) + '</option>'; }).join("") + '<option value="__add__">➕ Add a bag…</option>';
   }
 
+  function _slug(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"x"; }
   function seedItems(){ var S=side(); return SEED.map(function(s){ return {id:S+"-"+_slug(s.name), side:S, name:s.name, cat:s.cat, note:s.note||"", warn:!!s.warn, bag:"", packed:false, suggested_to:"", suggested_by:""}; }); }
   function lkey(){ return "maui_pack_" + side(); }
   function saveLocal(){ try{ localStorage.setItem(lkey(), JSON.stringify(items)); }catch(e){} }
