@@ -759,7 +759,8 @@ const CAL = (function(){
   function itemById(id){ for(var i=0;i<items.length;i++){ if(items[i].id===id) return items[i]; } return null; }
   function fillLinkOptions(){ var sel=$("calLink"); if(!sel) return; var cur=sel.value;
     sel.innerHTML='<option value="">— link a cost (optional) —</option>'+items.map(it=>`<option value="${esc(it.id)}">${esc(it.name)}</option>`).join("");
-    sel.value=cur; }
+    sel.value=cur;
+    sel.onchange=function(){ var li=itemById(sel.value); var tb=$("calTitle"); if(li && tb && !tb.value.trim()){ tb.value=li.name; } }; }
   function jumpToCost(id){ showTab("budget"); setTimeout(function(){ var t=$("item-"+id); if(t){ t.scrollIntoView({behavior:"smooth",block:"center"}); t.classList.add("item-flash"); setTimeout(()=>t.classList.remove("item-flash"),1600);} },70); }
   function cmp(a,b){ if((a.date||"")!==(b.date||"")) return (a.date||"")<(b.date||"")?-1:1; var ta=a.time||"",tb=b.time||""; if(ta===tb)return 0; if(!ta)return -1; if(!tb)return 1; return ta<tb?-1:1; }
   function fmtDay(d){ var p=(d||"").split("-"); if(p.length!==3) return d||"(no date)"; var dt=new Date(+p[0],+p[1]-1,+p[2]); return dt.toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"}); }
@@ -793,7 +794,7 @@ const CAL = (function(){
     box.querySelectorAll(".cal-ev").forEach(function(card){
       var id=card.getAttribute("data-id");
       card.querySelectorAll(".cal-f").forEach(function(inp){
-        inp.onchange=function(){ var ev=events.filter(x=>x.id===id)[0]; if(!ev) return; ev[inp.getAttribute("data-f")]=inp.value; pushEvent(ev); render(); };
+        inp.onchange=function(){ var ev=events.filter(x=>x.id===id)[0]; if(!ev) return; var f=inp.getAttribute("data-f"); ev[f]=inp.value; if(f==="itemId" && inp.value && !(ev.title||"").trim()){ var li=itemById(inp.value); if(li){ ev.title=li.name; } } pushEvent(ev); render(); };
       });
       var del=card.querySelector("[data-del]");
       if(del) del.onclick=function(){ events=events.filter(x=>x.id!==id); removeEvent(id); render(); };
@@ -803,8 +804,10 @@ const CAL = (function(){
   }
   function add(){
     var d=$("calDate").value, t=$("calTitle").value.trim();
-    if(!d||!t){ if(!d) alert("Pick a date for the entry."); return; }
-    var ev={id:"c"+Date.now(), date:d, time:$("calTime").value||"", title:t, note:$("calNote").value.trim(), itemId:$("calLink").value||""};
+    var linkId=$("calLink").value||"";
+    if(!t && linkId){ var li=itemById(linkId); if(li){ t=li.name; } }   // pull title from the linked cost
+    if(!d||!t){ alert(!d?"Pick a date for the entry.":"Give it a title, or link a cost to use its name."); return; }
+    var ev={id:"c"+Date.now(), date:d, time:$("calTime").value||"", title:t, note:$("calNote").value.trim(), itemId:linkId};
     events.push(ev);
     $("calDate").value="";$("calTime").value="";$("calTitle").value="";$("calNote").value="";$("calLink").value="";
     pushEvent(ev); render();
