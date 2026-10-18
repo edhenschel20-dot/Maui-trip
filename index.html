@@ -284,6 +284,13 @@
   .mode-badge{text-align:center;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;border-radius:8px;margin:-2px 0 14px;border:1px solid var(--line)}
   body.is-owner #modeBadge{background:var(--gold-soft);color:#5A3B0B;border-color:var(--gold)}
   body.is-guest #modeBadge{background:var(--sea);color:var(--deep)}
+  .vis-toggle{flex:0 0 auto;border:1px solid var(--line);background:#fff;color:var(--muted);font:inherit;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:4px 7px;border-radius:7px;cursor:pointer;white-space:nowrap}
+  .vis-toggle.on{background:var(--gold-soft);border-color:var(--gold);color:#5A3B0B}
+  .rtheirs-in{width:100%;font:inherit;font-size:11px;color:var(--muted);border:0;border-bottom:1px dashed var(--line);background:transparent;padding:2px 0;margin-top:3px}
+  .rtheirs-in:focus{outline:none;border-bottom:1px dashed var(--gold);color:var(--ink)}
+  .split-toggle{display:inline-block;border:1px solid var(--line);background:#fff;color:var(--muted);font:inherit;font-size:9px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 6px;border-radius:7px;cursor:pointer;white-space:nowrap;margin-top:4px}
+  .split-toggle.on{background:var(--sea);border-color:var(--sea);color:var(--deep)}
+  .rsplit-note{font-size:10px;font-weight:700;color:var(--good);margin-top:3px;line-height:1.3}
 </style>
 </head>
 <body class="is-guest">
@@ -291,7 +298,7 @@
   <div class="wrap">
     <div class="eyebrow">Departs Thanksgiving · 17 days · Maui</div>
     <h1>The <span>Hawaii</span> Trip</h1>
-    <div class="sub">Live plan — edits show up on everyone\'s phone. Two adults, one 7-year-old.</div>
+    <div class="sub">Live plan — edits show up on everyone&rsquo;s phone. Two adults, one 7-year-old.</div>
   </div>
 </header>
 
@@ -367,14 +374,14 @@
       <div class="ctrl-in"><span class="cur">$</span><input type="number" id="saved" value="0" step="1"></div>
     </div>
     <div class="ctrl">
-      <label>Two-week pays left before you leave</label>
-      <div class="hint">$500 = both your checks together, every two weeks.</div>
-      <div class="ctrl-in"><input type="range" id="checksR" min="0" max="10" value="7"><span style="font-weight:800;min-width:74px;text-align:right" id="checksV">7 pays</span></div>
+      <label>Per pay into Hawaii</label>
+      <div class="hint">$500 = both your checks together, every two weeks. Fixed.</div>
+      <div class="ctrl-in"><span style="font-weight:800;font-size:17px">$500</span><span style="color:var(--muted);margin-left:8px">every two weeks</span></div>
     </div>
     <div class="ctrl">
-      <label>Per pay into Hawaii</label>
-      <div class="hint">Drag down to see what eases up now — the trip stays funded well below that.</div>
-      <div class="ctrl-in"><input type="range" id="perR" min="0" max="500" step="25" value="500"><span style="font-weight:800;min-width:74px;text-align:right" id="perV">$500</span></div>
+      <label>Pays left before you leave</label>
+      <div class="hint">Counts every two weeks through your check the day before Thanksgiving (Wed Nov 25). Updates itself.</div>
+      <div class="ctrl-in"><span style="font-weight:800;font-size:17px" id="paysLeftTxt">—</span><span style="color:var(--muted);margin-left:8px" id="paysLeftSub">pays &times; $500 still to come</span></div>
       <div class="freed" id="freed"></div>
     </div>
   </section>
@@ -460,6 +467,15 @@ const $  = id => document.getElementById(id);
 const money = n => "$" + Math.round(+n||0).toLocaleString();
 const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function slug(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"x"; }
+// Biweekly pays left: counts paydays from today back to and including the last
+// check before departure (Wed Nov 25, 2026 — the day before Thanksgiving).
+function paysLeft(){
+  var last = new Date(2026,10,25);          // Nov 25, 2026 (last payday before leaving)
+  var today = new Date(); today.setHours(0,0,0,0);
+  var n=0, d=new Date(last);
+  while(d >= today){ n++; d.setDate(d.getDate()-14); }
+  return n;
+}
 
 const DEFAULT_ITEMS = [
   {name:"Scuba cert — you", note:"certification", cost:700},
@@ -523,11 +539,12 @@ function loadLocal(){
     events = e ? JSON.parse(e) : [];
     burn = b!=null ? (+b||0) : DEFAULT_BURN;
     const m = localStorage.getItem(LK.meta);
-    if(m){ const mo=JSON.parse(m); saved=+mo.saved||0; checks=+mo.checks||DEFAULT_CHECKS; per=+mo.per||DEFAULT_PER; }
+    if(m){ const mo=JSON.parse(m); saved=+mo.saved||0; }
   }catch(err){
     items = DEFAULT_ITEMS.map((it,idx)=>({id:slug(it.name),name:it.name,note:it.note,cost:it.cost,pos:idx}));
-    events = []; burn = DEFAULT_BURN; saved = DEFAULT_SAVED; checks = DEFAULT_CHECKS; per = DEFAULT_PER;
+    events = []; burn = DEFAULT_BURN; saved = DEFAULT_SAVED;
   }
+  per = 500; checks = paysLeft();
   renderAll();
 }
 
@@ -559,13 +576,13 @@ async function reload(maySeed){
   ]);
   if(ri.error) throw ri.error;
   if(re.error) throw re.error;
-  items = (ri.data||[]).map(r=>({id:r.id,name:r.name,note:r.note,cost:+r.cost||0,pos:r.pos||0,paid:!!r.paid}));
+  items = (ri.data||[]).map(r=>({id:r.id,name:r.name,note:r.note,cost:+r.cost||0,pos:r.pos||0,paid:!!r.paid,owner_only:!!r.owner_only,guest_only:!!r.guest_only,cost_guest:(r.cost_guest==null?null:+r.cost_guest),split:!!r.split,paid_guest:!!r.paid_guest}));
   events = (re.data||[]).map(r=>({id:r.id,date:r.edate,time:r.etime,title:r.title,note:r.note,itemId:r.item_id||""}));
   const md = (rm && rm.data) ? rm.data : {};
   burn   = md.burn!=null     ? (+md.burn||0)     : DEFAULT_BURN;
   saved  = md.saved!=null    ? (+md.saved||0)    : DEFAULT_SAVED;
-  checks = md.pays_left!=null ? (+md.pays_left||0): DEFAULT_CHECKS;
-  per    = md.per_pay!=null   ? (+md.per_pay||0)  : DEFAULT_PER;
+  per    = 500;              // fixed: $500 every two weeks
+  checks = paysLeft();       // auto-counted from today through Nov 25
   if(maySeed && items.length===0){ await seed(); return reload(false); }
   // one-time rescue: values entered while offline live in localStorage; adopt + push up
   try{
@@ -603,7 +620,7 @@ function queueReload(){
 /* ---------- writes (optimistic + push) ---------- */
 async function pushItem(it){
   saveLocal();
-  if(online){ try{ await sb.from("trip_items").upsert({id:it.id,trip:TRIP,name:it.name,note:it.note,cost:+it.cost||0,pos:it.pos||0,paid:!!it.paid}); }catch(e){ console.warn(e); } }
+  if(online){ try{ await sb.from("trip_items").upsert({id:it.id,trip:TRIP,name:it.name,note:it.note,cost:+it.cost||0,pos:it.pos||0,paid:!!it.paid,owner_only:!!it.owner_only,guest_only:!!it.guest_only,cost_guest:(it.cost_guest==null?null:+it.cost_guest),split:!!it.split,paid_guest:!!it.paid_guest}); }catch(e){ console.warn(e); } }
 }
 async function removeItem(id){
   if(online){ try{ await sb.from("trip_items").delete().eq("trip",TRIP).eq("id",id); }catch(e){ console.warn(e); } }
@@ -626,24 +643,41 @@ async function removeEvent(id){
 function renderItems(){
   const box=$("items"); box.innerHTML="";
   items.forEach((it,i)=>{
+    if(ownerMode ? it.guest_only : it.owner_only){ return; }
     const row=document.createElement("div");
-    row.className="row"+((ownerMode&&it.paid)?" done":""); row.id="item-"+(it.id||i);
+    row.className="row"+(((ownerMode?it.paid:it.paid_guest))?" done":""); row.id="item-"+(it.id||i);
+    const priceVal = it.split
+      ? (ownerMode ? (+it.cost||0) : (it.cost_guest==null?'':(+it.cost_guest||0)))
+      : (ownerMode ? (+it.cost||0) : (it.cost_guest!=null ? (+it.cost_guest||0) : (+it.cost||0)));
+    const pricePh = it.split && !ownerMode ? "your price" : "";
+    const splitNote = it.split
+      ? (ownerMode
+          ? `<div class="rsplit-note">Each side fills in their own — your number here, theirs on their phone.</div>`
+          : `<div class="rsplit-note">This one’s just for you — fill in your own price.</div>`)
+      : "";
     row.innerHTML=`
-      <input type="checkbox" class="chk owner-only" ${it.paid?"checked":""} data-paid="${i}">
+      <input type="checkbox" class="chk" ${(ownerMode?it.paid:it.paid_guest)?"checked":""} data-paid="${i}" title="Mark paid">
       <div class="rlabel">
         <input type="text" class="rname-in" value="${esc(it.name)}" data-name="${i}" placeholder="Activity name">
         <input type="text" class="rnote-in" value="${esc(it.note)}" data-note="${i}" placeholder="note (optional)">
+        ${it.split?"":`<input type="number" class="rtheirs-in owner-only" value="${it.cost_guest==null?'':(+it.cost_guest||0)}" data-theirs="${i}" step="10" placeholder="their price (blank = same)">`}
+        ${splitNote}
+        <button class="split-toggle owner-only ${it.split?"on":""}" data-split="${i}" title="Each side enters their own price">${it.split?"✓ Separate price each side":"Separate price each side"}</button>
       </div>
       <div class="rcost"><span class="cur">$</span>
-        <input type="number" value="${+it.cost||0}" step="10" data-cost="${i}"></div>
+        <input type="number" value="${priceVal}" ${pricePh?`placeholder="${pricePh}"`:""} step="10" data-cost="${i}"></div>
+      <button class="vis-toggle ${(ownerMode?it.owner_only:it.guest_only)?"on":""}" data-vis="${i}" title="Show or hide this for the other group">${(ownerMode?it.owner_only:it.guest_only)?"Only us":"Shared"}</button>
       <button class="rdel" data-del="${i}" title="Remove">&times;</button>`;
     box.appendChild(row);
   });
-  box.querySelectorAll("[data-cost]").forEach(inp=>inp.onchange=e=>{ const it=items[+e.target.dataset.cost]; it.cost=+e.target.value||0; pushItem(it); recalc(); });
+  box.querySelectorAll("[data-cost]").forEach(inp=>inp.onchange=e=>{ const it=items[+e.target.dataset.cost]; if(ownerMode){ it.cost=+e.target.value||0; } else { const v=e.target.value.trim(); it.cost_guest=(v==="")?null:(+v||0); } pushItem(it); recalc(); });
+  box.querySelectorAll("[data-theirs]").forEach(inp=>inp.onchange=e=>{ const it=items[+e.target.dataset.theirs]; const v=e.target.value.trim(); it.cost_guest = (v==="") ? null : (+v||0); pushItem(it); recalc(); });
   box.querySelectorAll("[data-name]").forEach(inp=>inp.onchange=e=>{ const it=items[+e.target.dataset.name]; it.name=e.target.value; pushItem(it); });
   box.querySelectorAll("[data-note]").forEach(inp=>inp.onchange=e=>{ const it=items[+e.target.dataset.note]; it.note=e.target.value; pushItem(it); });
   box.querySelectorAll("[data-del]").forEach(b=>b.onclick=e=>{ const i=+e.currentTarget.dataset.del, it=items[i]; if(confirm(`Remove "${it.name||"this item"}"?`)){ const id=it.id; items.splice(i,1); removeItem(id); renderItems(); recalc(); } });
-  box.querySelectorAll("[data-paid]").forEach(c=>c.onchange=e=>{ const it=items[+e.target.dataset.paid]; const paying=e.target.checked; it.paid=paying; saved=(+saved||0)+(paying? -(+it.cost||0) : (+it.cost||0)); if($("saved"))$("saved").value=saved; pushItem(it); pushMeta(); renderItems(); recalc(); });
+  box.querySelectorAll("[data-paid]").forEach(c=>c.onchange=e=>{ const it=items[+e.target.dataset.paid]; const paying=e.target.checked; if(ownerMode){ it.paid=paying; saved=(+saved||0)+(paying? -(+it.cost||0) : (+it.cost||0)); if($("saved"))$("saved").value=saved; pushItem(it); pushMeta(); } else { it.paid_guest=paying; pushItem(it); } renderItems(); recalc(); });
+  box.querySelectorAll("[data-vis]").forEach(b=>b.onclick=e=>{ const it=items[+e.currentTarget.dataset.vis]; if(ownerMode){ it.owner_only=!it.owner_only; } else { it.guest_only=!it.guest_only; } pushItem(it); renderItems(); recalc(); });
+  box.querySelectorAll("[data-split]").forEach(b=>b.onclick=e=>{ const it=items[+e.currentTarget.dataset.split]; it.split=!it.split; pushItem(it); renderItems(); recalc(); });
 }
 function addItem(){
   const n=$("niName").value.trim(); if(!n){ return; }
@@ -653,8 +687,11 @@ function addItem(){
   pushItem(it); renderItems(); recalc();
 }
 function recalc(){
-  const planned=items.reduce((s,i)=>s+(+i.cost||0),0);
-  const booked =items.filter(i=>i.paid).reduce((s,i)=>s+(+i.cost||0),0);
+  const eff=function(it){ if(it.split){ return ownerMode ? (+it.cost||0) : (+it.cost_guest||0); } return (!ownerMode && it.cost_guest!=null) ? (+it.cost_guest||0) : (+it.cost||0); };
+  const vis=items.filter(it=> ownerMode ? !it.guest_only : !it.owner_only);
+  const planned=vis.reduce((s,i)=>s+eff(i),0);
+  const paidOf=function(it){ return ownerMode ? it.paid : it.paid_guest; };
+  const booked =vis.filter(paidOf).reduce((s,i)=>s+eff(i),0);
   const remaining=planned-booked;
   const tripCost=remaining+(+burn||0);
   const contribTotal=(+checks||0)*(+per||0);
@@ -662,8 +699,8 @@ function recalc(){
   const cushion=available-tripCost;
 
   $("famTotal").textContent=money(planned);
-  $("famSub").textContent=`${items.length} items planned`;
-  $("bookSum").textContent= ownerMode ? `${money(booked)} paid \u00b7 ${money(remaining)} left to book` : `${money(planned)} total`;
+  $("famSub").textContent=`${vis.length} items planned`;
+  $("bookSum").textContent= ownerMode ? `${money(booked)} paid \u00b7 ${money(remaining)} left to book` : (booked>0 ? `${money(planned)} total \u00b7 ${money(booked)} marked paid` : `${money(planned)} total`);
 
   // funding gauge (owner)
   const gv=$("verdict");
@@ -697,28 +734,24 @@ function recalc(){
     $("bank2Fill").style.width=eaten+"%";
     $("bank2Fill").style.background = bankAfterList>=0 ? "var(--good)" : "var(--coral)";
   }
-  // freed readout (owner)
+  // funding-timeline readout (owner)
   const f=$("freed");
   if(f){
-    const diff=500-(+per||0);
-    if(diff>0){ f.style.display="block"; f.innerHTML=`Easing to <b>${money(per)}/pay</b> frees up <span class="big">${money(diff)}</span> a pay to live on now \u2014 about <b>${money(diff/2)}/week</b> back in your pocket, and the trip still shows funded above.`; }
-    else if(diff===0){ f.style.display="block"; f.innerHTML=`Full <b>$500/pay</b> \u2014 biggest cushion, tightest weeks. Drag down to trade cushion for breathing room now.`; }
-    else{ f.style.display="none"; }
+    if(checks>0){ f.style.display="block"; f.innerHTML=`<b>${checks} ${checks===1?"pay":"pays"}</b> \u00d7 $500 = <span class="big">${money(checks*500)}</span> still landing before you leave \u2014 through your check on <b>Wed Nov 25</b>, the day before Thanksgiving.`; }
+    else{ f.style.display="block"; f.innerHTML=`No pays left before departure \u2014 what\u2019s in the account now is what you fly with.`; }
   }
 }
 function syncControls(){
   if($("saved")) $("saved").value=saved;
   if($("burn")) $("burn").value=burn;
-  if($("checksR")){ $("checksR").value=checks; $("checksV").textContent=checks+(checks===1?" pay":" pays"); }
-  if($("perR")){ $("perR").value=per; $("perV").textContent=money(per); }
+  if($("paysLeftTxt")) $("paysLeftTxt").textContent = checks + (checks===1?" pay":" pays");
+  if($("paysLeftSub")) $("paysLeftSub").textContent = "× $500 = " + money(checks*500) + " still to come";
 }
 let _ownerBound=false;
 function bindOwner(){
   if(_ownerBound) return; _ownerBound=true;
   if($("saved")) $("saved").onchange=e=>{ saved=+e.target.value||0; pushMeta(); recalc(); };
   if($("burn")) $("burn").onchange=e=>{ burn=+e.target.value||0; pushMeta(); recalc(); };
-  if($("checksR")) $("checksR").oninput=e=>{ checks=+e.target.value; $("checksV").textContent=checks+(checks===1?" pay":" pays"); pushMeta(); recalc(); };
-  if($("perR")) $("perR").oninput=e=>{ per=+e.target.value; $("perV").textContent=money(per); pushMeta(); recalc(); };
 }
 
 /* ---------- Calendar ---------- */
