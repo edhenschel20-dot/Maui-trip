@@ -463,6 +463,7 @@
 <!-- CALENDAR -->
 <div class="wrap tab-panel" id="panel-calendar" style="display:none">
   <div class="cal-grid-wrap" id="calGrid"></div>
+  <div id="calList"></div>
   <div class="cal-add">
     <h2>Add an entry</h2>
     <div class="cal-add-row">
@@ -496,7 +497,6 @@
     </select>
     <button onclick="CAL.add()">Add to calendar</button>
   </div>
-  <div id="calList"></div>
   <div class="foot">Shared live schedule — everyone sees changes.</div>
 </div>
 
@@ -850,7 +850,7 @@ const CAL = (function(){
       `<div class="cg-dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>`+
       `<div class="cg-grid">${cells}</div>`;
     g.querySelectorAll("[data-nav]").forEach(b=>b.onclick=function(){ gridMonth=new Date(y,m+(+this.getAttribute("data-nav")),1); render(); });
-    g.querySelectorAll("[data-day]").forEach(c=>c.onclick=function(){ var ds=this.getAttribute("data-day"); selDate=(selDate===ds)?null:ds; if(selDate && $("calDate") && !$("calDate").value){ $("calDate").value=selDate; } render(); });
+    g.querySelectorAll("[data-day]").forEach(c=>c.onclick=function(){ var ds=this.getAttribute("data-day"); selDate=(selDate===ds)?null:ds; if(selDate && $("calDate") && !$("calDate").value){ $("calDate").value=selDate; } render(); var gw=$("calGrid"); if(selDate && gw && gw.scrollIntoView){ gw.scrollIntoView({behavior:"smooth",block:"start"}); } });
   }
   function render(){
     renderGrid();
