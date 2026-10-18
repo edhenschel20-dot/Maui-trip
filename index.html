@@ -291,6 +291,27 @@
   .split-toggle{display:inline-block;border:1px solid var(--line);background:#fff;color:var(--muted);font:inherit;font-size:9px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:3px 6px;border-radius:7px;cursor:pointer;white-space:nowrap;margin-top:4px}
   .split-toggle.on{background:var(--sea);border-color:var(--sea);color:var(--deep)}
   .rsplit-note{font-size:10px;font-weight:700;color:var(--good);margin-top:3px;line-height:1.3}
+  .cal-grid-wrap{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:14px}
+  .cg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .cg-title{font-weight:800;font-size:15px;color:var(--deep)}
+  .cg-nav{border:1px solid var(--line);background:#fff;color:var(--deep);font-size:18px;line-height:1;width:34px;height:34px;border-radius:9px;cursor:pointer}
+  .cg-nav:active{background:var(--sea)}
+  .cg-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+  .cg-dow span{text-align:center;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+  .cg-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cg-cell{position:relative;aspect-ratio:1/1;border:1px solid transparent;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:var(--paper,#F7F4EC)}
+  .cg-empty{background:transparent;cursor:default}
+  .cg-num{font-size:13px;font-weight:700;color:var(--ink)}
+  .cg-has{background:var(--sea)}
+  .cg-has .cg-num{color:var(--deep)}
+  .cg-today{border-color:var(--gold)}
+  .cg-sel{background:var(--deep)}
+  .cg-sel .cg-num{color:#fff}
+  .cg-dots{position:absolute;bottom:6px;display:flex;gap:2px}
+  .cg-dots i{width:4px;height:4px;border-radius:50%;background:var(--gold)}
+  .cg-sel .cg-dots i{background:#fff}
+  .cal-day-sel{display:flex;align-items:center;gap:10px;margin:4px 0 10px}
+  .cal-allbtn{border:1px solid var(--line);background:#fff;color:var(--deep);font:inherit;font-size:12px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer}
 </style>
 </head>
 <body class="is-guest">
@@ -441,6 +462,7 @@
 
 <!-- CALENDAR -->
 <div class="wrap tab-panel" id="panel-calendar" style="display:none">
+  <div class="cal-grid-wrap" id="calGrid"></div>
   <div class="cal-add">
     <h2>Add an entry</h2>
     <div class="cal-add-row">
@@ -450,6 +472,28 @@
     <input type="text" class="cal-ttl" id="calTitle" placeholder="What\'s happening (e.g. Molokini dive)">
     <input type="text" class="cal-nt" id="calNote" placeholder="note (optional)">
     <select class="cal-link-sel" id="calLink"><option value="">— link a cost (optional) —</option></select>
+    <select class="cal-link-sel" id="calIdea" onchange="if(this.value){var t=document.getElementById('calTitle');t.value=this.value;this.value='';var d=document.getElementById('calDate');if(d&&d.focus)d.focus();}">
+      <option value="">— or pick one of her ideas (then add a date) —</option>
+      <optgroup label="Maybe meals">
+        <option>Loco Deck, Lahaina</option>
+        <option>Sea House, Lahaina (lunch or dinner)</option>
+        <option>Penguins @ Hyatt Regency Kaanapali</option>
+      </optgroup>
+      <optgroup label="Dinner options">
+        <option>Honu Oceanside</option>
+        <option>Aloha Mixed Plate</option>
+      </optgroup>
+      <optgroup label="Rain-day ideas">
+        <option>Arcade / Bowling @ Westin Kaanapali</option>
+        <option>Penny's, Lahaina</option>
+        <option>Flatbread Pizza, Paia</option>
+        <option>Ho'okipa Beach Park</option>
+      </optgroup>
+      <optgroup label="Maybe book">
+        <option>Shark Dive @ Maui Ocean Center (Mon/Wed/Fri 2:30-5:30)</option>
+        <option>Ocean Vodka distillery tour</option>
+      </optgroup>
+    </select>
     <button onclick="CAL.add()">Add to calendar</button>
   </div>
   <div id="calList"></div>
@@ -779,10 +823,46 @@ const CAL = (function(){
       <select class="cal-f cal-link-in" data-f="itemId">${opts}</select>${chip}
     </div>`;
   }
+  var gridMonth=null, selDate=null;
+  function pad2(n){ return (n<10?"0":"")+n; }
+  function ymd(dt){ return dt.getFullYear()+"-"+pad2(dt.getMonth()+1)+"-"+pad2(dt.getDate()); }
+  function parseYmd(s){ var p=(s||"").split("-"); return p.length===3? new Date(+p[0],+p[1]-1,+p[2]) : null; }
+  function defaultMonth(){ var evs=events.filter(e=>e.date).sort(cmp); if(evs.length){ var d=parseYmd(evs[0].date); if(d) return new Date(d.getFullYear(),d.getMonth(),1); } return new Date(2026,10,1); }
+  function renderGrid(){
+    var g=$("calGrid"); if(!g) return;
+    if(!gridMonth) gridMonth=defaultMonth();
+    var y=gridMonth.getFullYear(), m=gridMonth.getMonth();
+    var first=new Date(y,m,1), startDow=first.getDay(), days=new Date(y,m+1,0).getDate();
+    var counts={}; events.forEach(e=>{ if(e.date){ counts[e.date]=(counts[e.date]||0)+1; } });
+    var todayStr=ymd(new Date());
+    var monthName=first.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+    var cells="";
+    for(var i=0;i<startDow;i++){ cells+='<div class="cg-cell cg-empty"></div>'; }
+    for(var d=1;d<=days;d++){
+      var ds=y+"-"+pad2(m+1)+"-"+pad2(d);
+      var n=counts[ds]||0;
+      var cls="cg-cell"+(ds===todayStr?" cg-today":"")+(ds===selDate?" cg-sel":"")+(n?" cg-has":"");
+      var dots=n?('<div class="cg-dots">'+Array(Math.min(n,3)).fill("<i></i>").join("")+"</div>"):"";
+      cells+=`<div class="${cls}" data-day="${ds}"><span class="cg-num">${d}</span>${dots}</div>`;
+    }
+    g.innerHTML=
+      `<div class="cg-head"><button class="cg-nav" data-nav="-1" title="Previous month">‹</button><div class="cg-title">${esc(monthName)}</div><button class="cg-nav" data-nav="1" title="Next month">›</button></div>`+
+      `<div class="cg-dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>`+
+      `<div class="cg-grid">${cells}</div>`;
+    g.querySelectorAll("[data-nav]").forEach(b=>b.onclick=function(){ gridMonth=new Date(y,m+(+this.getAttribute("data-nav")),1); render(); });
+    g.querySelectorAll("[data-day]").forEach(c=>c.onclick=function(){ var ds=this.getAttribute("data-day"); selDate=(selDate===ds)?null:ds; if(selDate && $("calDate") && !$("calDate").value){ $("calDate").value=selDate; } render(); });
+  }
   function render(){
+    renderGrid();
     var box=$("calList");
     var evs=events.slice().sort(cmp);
-    if(!evs.length){ box.innerHTML='<div class="cal-empty">No entries yet. Add your first below — it shows up for everyone.</div>'; fillLinkOptions(); return; }
+    if(selDate){
+      var dayEvs=evs.filter(e=>e.date===selDate);
+      var head=`<div class="cal-day-sel"><button class="cal-allbtn" id="calAll">‹ All days</button><span class="cal-day-head">${esc(fmtDay(selDate))}</span></div>`;
+      box.innerHTML=head+(dayEvs.length? dayEvs.map(row).join("") : '<div class="cal-empty">Nothing planned this day yet — add it below.</div>');
+      bind(); var ab=$("calAll"); if(ab) ab.onclick=function(){ selDate=null; render(); }; fillLinkOptions(); return;
+    }
+    if(!evs.length){ box.innerHTML='<div class="cal-empty">No entries yet. Tap a day above, or add one below — it shows up for everyone.</div>'; fillLinkOptions(); return; }
     var byDate={},order=[];
     evs.forEach(ev=>{ var d=ev.date||""; if(!byDate[d]){byDate[d]=[];order.push(d);} byDate[d].push(ev); });
     var html="";
@@ -810,6 +890,7 @@ const CAL = (function(){
     var ev={id:"c"+Date.now(), date:d, time:$("calTime").value||"", title:t, note:$("calNote").value.trim(), itemId:linkId};
     events.push(ev);
     $("calDate").value="";$("calTime").value="";$("calTitle").value="";$("calNote").value="";$("calLink").value="";
+    var dd=parseYmd(d); if(dd){ gridMonth=new Date(dd.getFullYear(),dd.getMonth(),1); selDate=d; }
     pushEvent(ev); render();
   }
   return {render:render, add:add, fillLinkOptions:fillLinkOptions};
