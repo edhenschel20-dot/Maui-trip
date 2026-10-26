@@ -189,6 +189,8 @@
   .pk-bagsel{font:inherit;font-size:12.5px;font-weight:600;color:var(--deep);background:var(--sea);
     border:1px solid var(--line);border-radius:7px;padding:5px 8px;cursor:pointer;max-width:100%}
   .pk-catsel{font:inherit;font-size:12px;color:var(--muted);background:transparent;border:0;cursor:pointer}
+  .pk-whosel{font:inherit;font-size:12.5px;font-weight:700;color:#5A3B0B;background:var(--gold-soft);border:1px solid var(--gold);border-radius:7px;padding:5px 8px;cursor:pointer;max-width:100%}
+  .pk-split{font:inherit;font-size:11px;font-weight:700;color:var(--deep);background:#fff;border:1px dashed var(--deep);border-radius:7px;padding:4px 8px;cursor:pointer}
   .pk-del{flex:0 0 auto;border:0;background:transparent;color:var(--muted);font-size:20px;
     line-height:1;cursor:pointer;padding:2px 4px;margin-top:-2px}
   .pk-del:hover{color:var(--coral)}
@@ -443,6 +445,7 @@
   <div id="pkSuggestBox"></div>
   <div class="pk-toggle">
     <button id="pkBtnCat" class="active" onclick="PK.setView('cat')">By category</button>
+    <button id="pkBtnWho" onclick="PK.setView('person')">By person</button>
     <button id="pkBtnBag" onclick="PK.setView('bag')">By bag</button>
   </div>
   <div id="pkList"></div>
@@ -450,6 +453,7 @@
     <h2>Add an item</h2>
     <input type="text" id="pkNewName" placeholder="e.g. Reef shoes, charger…">
     <div class="pk-selrow">
+      <label>For<select id="pkNewWho"></select></label>
       <label>Category<select id="pkNewCat"></select></label>
       <label>Goes in<select id="pkNewBag"></select></label>
     </div>
@@ -457,7 +461,7 @@
     <label class="pk-suggest"><input type="checkbox" id="pkSuggestChk"> Suggest to <span id="pkOtherName">the other group</span> instead of adding to mine</label>
     <button class="pk-addbtn" onclick="PK.addItem()">Add</button>
   </div>
-  <div class="foot">Your group's packing list — private to your side, synced live across your phones. <span style="opacity:.6">· build Oct18-c</span></div>
+  <div class="foot">Your group's packing list — private to your side, synced live across your phones. <span style="opacity:.6">· build Oct25-a</span></div>
 </div>
 
 <!-- CALENDAR -->
@@ -984,12 +988,15 @@ var PK = (function(){
   }
 
   function _slug(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"x"; }
-  function seedItems(){ var S=side(); return SEED.map(function(s){ return {id:S+"-"+_slug(s.name), side:S, name:s.name, cat:s.cat, note:s.note||"", warn:!!s.warn, bag:"", packed:false, suggested_to:"", suggested_by:""}; }); }
+  function people(){ return side()==="owner" ? ["Ed","Sue","Chris"] : ["Tony","Kathy"]; }
+  function personBag(p){ if(!p) return ""; var bs=allBags(), lp=p.toLowerCase(); for(var i=0;i<bs.length;i++){ var lb=bs[i].toLowerCase(); if(lb.indexOf(lp+"'s")===0 || lb.indexOf(lp+" ")===0) return bs[i]; } return ""; }
+  function personOptions(selected){ var o='<option value=""' + (selected?"":" selected") + '>Shared</option>'; o+=people().map(function(p){ return '<option ' + (p===selected?"selected":"") + '>' + esc(p) + '</option>'; }).join(""); return o; }
+  function seedItems(){ var S=side(); return SEED.map(function(s){ return {id:S+"-"+_slug(s.name), side:S, name:s.name, cat:s.cat, note:s.note||"", warn:!!s.warn, bag:"", packed:false, person:"", suggested_to:"", suggested_by:""}; }); }
   function lkey(){ return "maui_pack_" + side(); }
   function saveLocal(){ try{ localStorage.setItem(lkey(), JSON.stringify(items)); }catch(e){} }
   function loadLocal(){ var arr=null; try{ var r=localStorage.getItem(lkey()); arr=r?JSON.parse(r):null; }catch(e){} items=(arr && arr.length)?arr:seedItems(); if(!online){ suggestions=[]; } render(); }
 
-  function rowToItem(r){ return {id:r.id, side:r.side||"", name:r.name, cat:r.cat, note:r.note||"", warn:!!r.warn, bag:r.bag||"", packed:!!r.packed, suggested_to:r.suggested_to||"", suggested_by:r.suggested_by||""}; }
+  function rowToItem(r){ return {id:r.id, side:r.side||"", name:r.name, cat:r.cat, note:r.note||"", warn:!!r.warn, bag:r.bag||"", packed:!!r.packed, person:r.person||"", suggested_to:r.suggested_to||"", suggested_by:r.suggested_by||""}; }
   function pull(maySeed){
     return psb.from("trip_packing").select("*").eq("trip", TRIP).then(function(res){
       if(res.error){ throw res.error; }
@@ -1002,18 +1009,20 @@ var PK = (function(){
   }
   function seedRemote(){
     var S=side();
-    var rows = SEED.map(function(s){ return {id:S+"-"+_slug(s.name), trip:TRIP, side:S, name:s.name, cat:s.cat, note:s.note||"", warn:!!s.warn, bag:"", packed:false, suggested_to:"", suggested_by:""}; });
+    var rows = SEED.map(function(s){ return {id:S+"-"+_slug(s.name), trip:TRIP, side:S, name:s.name, cat:s.cat, note:s.note||"", warn:!!s.warn, bag:"", packed:false, person:"", suggested_to:"", suggested_by:""}; });
     return psb.from("trip_packing").upsert(rows);
   }
   function subscribe(){
     psb.channel("pack-"+TRIP).on("postgres_changes",{event:"*",schema:"public",table:"trip_packing",filter:"trip=eq."+TRIP}, function(){ if(online){ pull(false).catch(function(){}); } }).subscribe();
   }
-  function pushRow(it){ saveLocal(); if(online){ psb.from("trip_packing").upsert({id:it.id,trip:TRIP,side:it.side||"",name:it.name,cat:it.cat,note:it.note||"",warn:!!it.warn,bag:it.bag||"",packed:!!it.packed,suggested_to:it.suggested_to||"",suggested_by:it.suggested_by||""}).then(function(r){ if(r&&r.error){ console.warn(r.error); } }); } }
+  function pushRow(it){ saveLocal(); if(online){ psb.from("trip_packing").upsert({id:it.id,trip:TRIP,side:it.side||"",name:it.name,cat:it.cat,note:it.note||"",warn:!!it.warn,bag:it.bag||"",packed:!!it.packed,person:it.person||"",suggested_to:it.suggested_to||"",suggested_by:it.suggested_by||""}).then(function(r){ if(r&&r.error){ console.warn(r.error); } }); } }
   function removeRow(id){ if(online){ psb.from("trip_packing").delete().eq("trip",TRIP).eq("id",id).then(function(){}); } saveLocal(); }
 
   function findItem(id){ return items.filter(function(x){return x.id===id;})[0] || suggestions.filter(function(x){return x.id===id;})[0]; }
-  function setView(v){ view=v; el("pkBtnCat").classList.toggle("active", v==="cat"); el("pkBtnBag").classList.toggle("active", v==="bag"); render(); }
+  function setView(v){ view=v; el("pkBtnCat").classList.toggle("active", v==="cat"); if(el("pkBtnWho")) el("pkBtnWho").classList.toggle("active", v==="person"); el("pkBtnBag").classList.toggle("active", v==="bag"); render(); }
   function toggle(id){ var it=findItem(id); if(it){ it.packed=!it.packed; pushRow(it); render(); } }
+  function changePerson(id,val){ var it=findItem(id); if(!it){ return; } it.person=val; if(val && !it.bag){ var pb=personBag(val); if(pb){ it.bag=pb; } } pushRow(it); render(); }
+  function splitEach(id){ var it=findItem(id); if(!it){ return; } var ppl=people(); ppl.forEach(function(p){ var nb=personBag(p)||it.bag||""; var copy={id:"p"+Date.now()+Math.floor(Math.random()*99999), side:side(), name:it.name, cat:it.cat, note:it.note||"", warn:!!it.warn, bag:nb, packed:false, person:p, suggested_to:"", suggested_by:""}; items.push(copy); pushRow(copy); }); items=items.filter(function(x){return x.id!==id;}); removeRow(id); render(); }
   function changeBag(id,val){ var it=findItem(id); if(!it){ return; } if(val==="__add__"){ var nm=(window.prompt("Name the bag or container:","")||"").trim(); if(nm){ saveCustomBag(nm); it.bag=nm; pushRow(it); } render(); return; } it.bag=val; pushRow(it); render(); }
   function changeCat(id,val){ var it=findItem(id); if(it){ it.cat=val; pushRow(it); render(); } }
   function del(id){ items=items.filter(function(x){return x.id!==id;}); removeRow(id); render(); }
@@ -1028,8 +1037,14 @@ var PK = (function(){
       el("pkSuggestChk").checked=false;
     } else {
       var bag=el("pkNewBag").value; if(bag==="__add__"){ bag=""; }
-      var it={id:"p"+Date.now()+Math.floor(Math.random()*999), side:side(), name:name, cat:cat, note:note, warn:false, bag:bag, packed:false, suggested_to:"", suggested_by:""};
-      items.push(it); pushRow(it);
+      var who=el("pkNewWho") ? el("pkNewWho").value : "";
+      if(who==="__each__"){
+        people().forEach(function(p){ var nb=bag||personBag(p); var it={id:"p"+Date.now()+Math.floor(Math.random()*99999), side:side(), name:name, cat:cat, note:note, warn:false, bag:nb, packed:false, person:p, suggested_to:"", suggested_by:""}; items.push(it); pushRow(it); });
+      } else {
+        var b1=bag||(who?personBag(who):"");
+        var it={id:"p"+Date.now()+Math.floor(Math.random()*999), side:side(), name:name, cat:cat, note:note, warn:false, bag:b1, packed:false, person:who, suggested_to:"", suggested_by:""};
+        items.push(it); pushRow(it);
+      }
     }
     el("pkNewName").value=""; el("pkNewNote").value=""; render();
   }
@@ -1037,13 +1052,15 @@ var PK = (function(){
   function dismissSuggestion(id){ suggestions=suggestions.filter(function(x){return x.id!==id;}); removeRow(id); render(); }
 
   function itemRow(it){
+    var whoOptions = '<select class="pk-whosel" onchange="PK.changePerson(\'' + it.id + '\',this.value)">' + personOptions(it.person||"") + '</select>';
     var bagOptions = '<select class="pk-bagsel" onchange="PK.changeBag(\'' + it.id + '\',this.value)">' + bagOptionList(it.bag) + '</select>';
-    var catOptions = view==="bag" ? '<select class="pk-catsel" onchange="PK.changeCat(\'' + it.id + '\',this.value)">' + CATEGORIES.map(function(c){ return '<option ' + (c===it.cat?"selected":"") + '>' + esc(c) + '</option>'; }).join("") + '</select>' : "";
+    var catOptions = (view==="bag"||view==="person") ? '<select class="pk-catsel" onchange="PK.changeCat(\'' + it.id + '\',this.value)">' + CATEGORIES.map(function(c){ return '<option ' + (c===it.cat?"selected":"") + '>' + esc(c) + '</option>'; }).join("") + '</select>' : "";
+    var splitBtn = (!it.person) ? '<button class="pk-split" onclick="PK.splitEach(\'' + it.id + '\')" title="Make a copy for each person">Split per person</button>' : "";
     var note = it.note ? '<div class="pk-note ' + (it.warn?"warn":"") + '">' + esc(it.note) + '</div>' : "";
     return '<div class="pk-item ' + (it.packed?"done":"") + '">' +
       '<div class="pk-check" onclick="PK.toggle(\'' + it.id + '\')"></div>' +
       '<div class="pk-body"><div class="pk-name">' + esc(it.name) + '</div>' + note +
-      '<div class="pk-row2">' + bagOptions + catOptions + '</div></div>' +
+      '<div class="pk-row2">' + whoOptions + bagOptions + catOptions + splitBtn + '</div></div>' +
       '<button class="pk-del" onclick="PK.del(\'' + it.id + '\')" aria-label="Remove">&times;</button></div>';
   }
   function renderSuggestions(){
@@ -1063,28 +1080,36 @@ var PK = (function(){
     var total=items.length, packed=items.filter(function(x){return x.packed;}).length;
     el("pkPacked").textContent=packed; el("pkTotal").textContent=total;
     var pct=total?Math.round(packed/total*100):0; el("pkPct").textContent=pct+"%"; el("pkBar").style.width=pct+"%";
-    var groups = view==="cat" ? CATEGORIES : allBags().concat([UNASSIGNED]);
+    var groups = view==="cat" ? CATEGORIES : view==="person" ? people().concat(["__shared__"]) : allBags().concat([UNASSIGNED]);
     var html="";
     groups.forEach(function(g){
-      var gi=(g===UNASSIGNED);
-      var list = items.filter(function(x){ return view==="cat" ? x.cat===g : (gi ? !x.bag : x.bag===g); });
+      var gi=(g===UNASSIGNED), gs=(g==="__shared__");
+      var list = items.filter(function(x){
+        if(view==="cat") return x.cat===g;
+        if(view==="person") return gs ? !x.person : x.person===g;
+        return gi ? !x.bag : x.bag===g;
+      });
       if(!list.length){ return; }
       var done=list.filter(function(x){return x.packed;}).length;
       var isBuy=(view==="bag" && g==="Buy there");
-      html += '<div class="pk-group"><div class="pk-group-head"><div class="pk-group-title ' + (isBuy?"buy":"") + '">' + esc(g) + '</div><div class="pk-group-meta">' + done + '/' + list.length + '</div></div>' + list.map(itemRow).join("") + '</div>';
+      var gname = gs ? "Shared (everyone)" : g;
+      html += '<div class="pk-group"><div class="pk-group-head"><div class="pk-group-title ' + (isBuy?"buy":"") + '">' + esc(gname) + '</div><div class="pk-group-meta">' + done + '/' + list.length + '</div></div>' + list.map(itemRow).join("") + '</div>';
     });
     el("pkList").innerHTML = html || '<div class="pk-empty">Nothing here yet.<br><button class="pk-addbtn" style="max-width:260px;margin:12px auto 0" onclick="PK.loadStarter()">Load the starter packing list</button></div>';
   }
 
   function loadStarter(){ if(online){ seedRemote().then(function(){ seededOnce[side()]=true; pull(false); }); } else { items=seedItems(); saveLocal(); render(); } }
+  function fillWhoOptions(){ if(el("pkNewWho")){ el("pkNewWho").innerHTML = '<option value="">Shared (everyone)</option>' + people().map(function(p){ return '<option>' + esc(p) + '</option>'; }).join("") + '<option value="__each__">Everyone — one each</option>'; } }
   function refresh(){
     el("pkNewBag").innerHTML = bagOptionList("");
+    fillWhoOptions();
     if(el("pkOtherName")){ el("pkOtherName").textContent = labelOf(other()); }
     if(online){ pull(false).catch(function(){ loadLocal(); }); } else { loadLocal(); }
   }
   function init(){
     el("pkNewCat").innerHTML = CATEGORIES.map(function(x){ return '<option>' + esc(x) + '</option>'; }).join("");
     el("pkNewBag").innerHTML = bagOptionList("");
+    fillWhoOptions();
     el("pkNewBag").onchange = function(){ if(this.value==="__add__"){ var nm=(window.prompt("Name the bag or container:","")||"").trim(); if(nm){ saveCustomBag(nm); } el("pkNewBag").innerHTML = bagOptionList(nm||""); } };
     if(el("pkOtherName")){ el("pkOtherName").textContent = labelOf(other()); }
     loadLocal();
@@ -1093,7 +1118,7 @@ var PK = (function(){
     }
     document.addEventListener("keydown", function(e){ if(e.key==="Enter" && (e.target.id==="pkNewName" || e.target.id==="pkNewNote")){ addItem(); } });
   }
-  return {setView:setView, toggle:toggle, changeBag:changeBag, changeCat:changeCat, del:del, addItem:addItem, acceptSuggestion:acceptSuggestion, dismissSuggestion:dismissSuggestion, loadStarter:loadStarter, refresh:refresh, init:init};
+  return {setView:setView, toggle:toggle, changeBag:changeBag, changeCat:changeCat, changePerson:changePerson, splitEach:splitEach, del:del, addItem:addItem, acceptSuggestion:acceptSuggestion, dismissSuggestion:dismissSuggestion, loadStarter:loadStarter, refresh:refresh, init:init};
 })();
 PK.init();
 
